@@ -1,0 +1,75 @@
+#patrol-targets { position:absolute; inset:0; pointer-events:none; }
+.training-robot {
+  --robot-size:92px;
+  position:absolute;
+  width:calc(var(--robot-size)*.59);
+  min-width:27px;
+  height:var(--robot-size);
+  transform:translate(-50%,-44%);
+  padding:0;
+  border:0;
+  background:none;
+  border-radius:8px;
+  color:#f9dc9a;
+  pointer-events:auto;
+  filter:drop-shadow(0 3px 2px #30201f72);
+}
+.training-robot span { position:absolute; display:block; }
+.robot-head { left:33%;top:0;width:34%;height:19%;border-radius:26% 26% 15% 15%;background:linear-gradient(125deg,#bd9a61,#53452e);border:1px solid #ddbd79; }
+.robot-head::after { content:"";position:absolute;left:13%;right:13%;top:34%;height:25%;border-radius:4px;background:#fff0ab;box-shadow:0 0 7px #f3ac66; }
+.robot-body { left:22%;top:20%;width:56%;height:40%;border-radius:15% 15% 27% 27%;background:radial-gradient(circle at center,#f2ca6e 0 7%,#855d39 8% 18%, transparent 21%),linear-gradient(130deg,#c19557,#766044 46%,#403a2d);border:1px solid #d4ae67; }
+.robot-arm,.robot-leg { background:linear-gradient(100deg,#ab8d60,#544431);border:1px solid #ad8b58; }
+.robot-arm { top:24%;width:18%;height:36%;border-radius:24%; }
+.robot-arm.left {left:6%;rotate:10deg}
+.robot-arm.right {right:6%;rotate:-10deg}
+.robot-leg {top:58%;width:20%;height:36%;border-radius:14%;transform-origin:top center;}
+.robot-leg.left {left:26%;rotate:7deg}
+.robot-leg.right {right:26%;rotate:-7deg}
+#patrol-targets[data-live="true"] .training-robot[data-state="patrol"] .robot-leg { animation: patrol-step .62s ease-in-out infinite alternate; }
+#patrol-targets[data-live="true"] .training-robot[data-state="patrol"] .robot-leg.right { animation-direction:alternate-reverse; }
+@keyframes patrol-step { from{transform:rotate(-14deg)} to{transform:rotate(16deg)} }
+.robot-label { left:50%; top:-13%; transform:translate(-50%,-48%); padding:2px 6px;color:#fff2c1;background:#27231de8;border:1px solid #e0b05b;border-radius:4px;font:700 12px/1.2 system-ui,sans-serif;white-space:nowrap; }
+.training-robot[data-state="warning"] .robot-head { background:#9b4142; border-color:#ffc389; box-shadow:0 0 17px #fc775c; }
+.training-robot[data-state="warning"] .robot-label {color:#ffe5cf; background:#642d22;border-color:#f49b7e;}
+.training-robot[data-state="stunned"] { opacity:.40; rotate:-10deg; pointer-events:none; }
+.range[data-locked="true"] .training-robot { pointer-events:none; }
+.patrol-bolt { position:absolute; z-index:1; width:9px; height:9px; pointer-events:none; border-radius:50%; background:#ffd4a0; box-shadow:0 0 7px 2px #ff8855,0 0 18px #f55750; }
+.damage-vignette { position:absolute; z-index:1; inset:0; pointer-events:none; opacity:0; background:radial-gradient(ellipse at center, transparent 50%, #c63532a8); }
+.challenge-status {
+  position:absolute; left:15px; bottom:68px; z-index:2;
+  display:flex; align-items:center; gap:8px; min-height:33px;
+  background:#19221de8; border:1px solid #efc68f66; padding:5px 9px; border-radius:6px;
+  pointer-events:none; color:#fff0d0; font-size:13px;
+}
+#health { display:flex; gap:4px; color:#ffad94; line-height:1; font-size:18px; }
+#health .lost { color:#88746a; }
+#challenge-state:empty { display:none; }
+#challenge-state[data-warning="true"] { color:#ffb798; font-weight:700; }
+#expanded-question, #expanded-progress { display:none; }
+.range.enlarged .objective-heading { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.range.enlarged #expanded-progress { display:inline; color:#c5cbbc; font-size:12px; }
+.range.enlarged #expanded-question {
+  display:block; position:absolute; z-index:3; top:56px; left:50%; transform:translateX(-50%);
+  width:min(790px,calc(100% - 28px));
+}
+.range.enlarged #expanded-question .objective { margin:0; min-height:56px; padding:8px 12px; background:#17201bf4; border-color:#edcc9873; }
+.range.enlarged #expanded-question .weapon-style { display:none; }
+.range.enlarged #expanded-question .objective-icon { width:34px;height:34px; }
+.range.enlarged .feedback { top:auto; bottom:113px; }
+.range.enlarged { inset:0; border-radius:0; }
+@media (max-width:600px) {
+  .challenge-status { left:9px;bottom:72px;gap:4px;padding:4px 5px; }
+  #challenge-state { font-size:11px; line-height:1.25; max-width:100px; }
+  .range.enlarged #expanded-question .objective { gap:6px; align-items:flex-start; }
+  .range.enlarged #expanded-question .objective-actions { margin-left:0; }
+  .range.enlarged #expanded-question .objective-icon { display:none; }
+  .range.enlarged #expanded-question .objective-label { font-size:12px; }
+}
+@media (max-width:365px) {
+  .movement {grid-template-columns:repeat(3,33px);}
+  .movement button {min-width:33px;}
+  .weapon-controls {gap:3px;}
+  .range-control {min-width:39px;font-size:12px;}
+}
+
+.range[data-jumping="true"] #jump { border-color:#f4bb67; background:#54452d; }

@@ -7,7 +7,7 @@ const shotgunPositions=[[-3.85,1.7,-.75],[0,1.66,-1.1],[3.85,1.7,-.75]];
 const sniperPositions=[[-3.45,1.77,-9.1],[0,1.66,-16],[3.45,1.77,-9.1]];
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 
-export function createFiringRange({range, canvas, camera, canShoot, onHit, draw, announce, isMoving}) {
+export function createFiringRange({range, canvas, camera, canShoot, onHit, onActivity, otherTargets, draw, announce, isMoving}) {
   const view=id('viewmodel'), viewModel=createWeaponView(view);
   const shotCanvas=id('shot-fx'), ctx=shotCanvas.getContext('2d'), hitMark=id('hit-mark');
   const fireButton=id('fire'), reloadButton=id('reload'), aimButton=id('aim');
@@ -196,6 +196,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, draw,
 
   function shoot(origin, directed=false) {
     if(!canShoot()||reloadTimer) return;
+    onActivity();
     const now=performance.now();
     if(now<shotUntil) return;
     if(ammo===0) {
@@ -210,14 +211,15 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, draw,
     ammo--;
     const movingBonus=isMoving()&&!scoped ? 3 : 0;
     const points=pelletsAt(weapon,origin,scoped,movingBonus,burst,directed ? .25 : height/480);
-    const hit=hitTarget(points,targets,weapon.reach);
+    const possible=[...targets,...otherTargets()];
+    const hit=hitTarget(points,possible,weapon.reach);
     play('shot');
     renderShot(origin,points,hit,directed);
     status(ammo===0?'彈匣已空':weapon.cadence>=700?'上膛中…':'',ammo&&weapon.cadence>=700?weapon.cadence:0);
     updateHud();
     if(hit>=0) {
       onHit(hit);
-    } else if(weapon.reach&&hitTarget(points,targets)>=0) {
+    } else if(weapon.reach&&hitTarget(points,possible)>=0) {
       announce('距離太遠。向前移動，再用散彈槍射擊。',true,true);
     } else {
       announce('未命中資料靶。對準靶心後再開火。',true,true);
@@ -236,7 +238,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, draw,
   }
 
   function fireAtTarget(index) {
-    const target=targets.find(item=>item.index===index);
+    const target=[...targets,...otherTargets()].find(item=>item.index===index);
     if(target&&!locked()) shoot(target,true);
   }
 
@@ -278,6 +280,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, draw,
   });
   updateMute();
   id('mouse-aim').addEventListener('click',async()=>{
+    onActivity();
     if(locked()){
       document.exitPointerLock?.();
       return;
@@ -286,7 +289,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, draw,
       if(!canvas.requestPointerLock||!camera.available) throw new Error('Unavailable');
       await canvas.requestPointerLock();
     } catch {
-      announce('未能鎖定滑鼠。可拖曳畫面瞄準。',false,true);
+      announce('把滑鼠移到場內即可瞄準。',false,true);
     }
   });
   document.addEventListener('pointerlockchange',()=>{
@@ -294,7 +297,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, draw,
     id('mouse-aim').setAttribute('aria-pressed',String(locked()));
     if(!locked()) stopTrigger();
   });
-  document.addEventListener('pointerlockerror',()=>announce('可拖曳畫面瞄準。',false,true));
+  document.addEventListener('pointerlockerror',()=>announce('把滑鼠移到場內即可瞄準。',false,true));
 
   return {render,reset,pause,updateHud,locked,turnScale,startTrigger,stopTrigger,fireAtTarget,fireAtPointer,reload,toggleScope};
 }

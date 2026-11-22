@@ -1,6 +1,7 @@
 import {lessons} from './lessons.js';
 import {createWorld} from './world.js';
 import {createFiringRange} from './firing-range.js';
+import {createPatrolView, jumpHeight} from './patrol.js';
 
 const byId = id => document.getElementById(id);
 const icon = name => '<svg aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
@@ -39,6 +40,10 @@ let targetButtons = [];
 let activeWorker = null;
 let workerTimer = null;
 let enlarged = false;
+let jumpTime = null;
+let hoverPoint = null;
+let windowActive = true;
+let damageAnimation;
 
 const range = byId('range');
 const canvas = byId('world');
@@ -48,10 +53,15 @@ const codeDialog = byId('code-dialog');
 const finishDialog = byId('finish-dialog');
 const feedback = byId('feedback');
 const keys = byId('target-keys');
+const objective = byId('objective');
+const challengeState = byId('challenge-state');
 const currentRound = () => lessons[lesson].rounds[round];
 const modalIsOpen = () => helpDialog.open || codeDialog.open || finishDialog.open;
+const patrol = createPatrolView({range,camera,onTarget:index=>firing.fireAtTarget(index)});
 const firing = createFiringRange({
-  range, canvas, camera, draw, announce, onHit:select,
+  range, canvas, camera, draw, announce,
+  onHit:index=>index<3?select(index):hitPatrol(index),
+  onActivity:startActivity, otherTargets:()=>patrol.targets,
   canShoot:()=>phase==='scan'&&!modalIsOpen(),
   isMoving:()=>['w','a','s','d'].some(key=>moving.has(key)),
 });
@@ -94,11 +104,18 @@ function renderRound() {
   const item = lessons[lesson];
   const challenge = currentRound();
   phase = 'scan';
+  resetJump();
+  moving.clear();
+  hoverPoint=null;
+  byId('jump').disabled=false;
+  patrol.reset();
+  setChallengeStatus('開始瞄準或移動');
   byId('sector').textContent = '關卡 ' + String(lesson + 1).padStart(2,'0') + ' / ' + String(lessonCount).padStart(2,'0');
   byId('mission-title').textContent = item.name;
   byId('mission-intro').textContent = item.intro;
   byId('location-name').textContent = item.site;
   byId('round').innerHTML = '任務 <b>' + (round + 1) + '</b> / ' + item.rounds.length;
+  byId('expanded-progress').textContent='關卡 '+(lesson+1)+' / '+lessonCount+' · 任務 '+(round+1)+' / '+item.rounds.length;
   byId('round-pips').replaceChildren(...item.rounds.map((_, index) => {
     const pip=document.createElement('i');
     if (index === round) pip.className='active';
@@ -148,6 +165,7 @@ function announce(text, error = false, auto = false) {
 
 function select(index) {
   if (phase !== 'scan') return;
+  startActivity();
   const challenge = currentRound();
   targetButtons.forEach(button => delete button.dataset.hit);
   if (index !== challenge.correct) {
@@ -157,6 +175,9 @@ function select(index) {
   }
 
   phase = challenge.code ? 'code' : 'solved';
+  patrol.stop();
+  byId('jump').disabled=true;
+  setChallengeStatus('已命中答案');
   targetButtons[index].dataset.hit = 'correct';
   targetButtons.forEach(button => {button.disabled = true;});
   Array.from(keys.children).forEach(button => {button.disabled = true;});
@@ -174,7 +195,7 @@ function select(index) {
     openCode();
   } else {
     award();
-    if (!enlarged) byId('advance').focus({preventScroll:true});
+    byId('advance').focus({preventScroll:true});
   }
 }
 
@@ -192,13 +213,19 @@ function award() {
 
 function next() {
   if (phase === 'code') {openCode();return;}
+  if (phase === 'failed') {
+    camera.reset();
+    renderRound();
+    canvas.focus({preventScroll:true});
+    return;
+  }
   if (phase !== 'solved') return;
   if (round + 1 < lessons[lesson].rounds.length) {
     round++;
     camera.reset();
     renderRound();
-    range.scrollIntoView({block:'nearest'});
-    targetButtons[0].focus({preventScroll:true});
+    if(!enlarged) range.scrollIntoView({block:'nearest'});
+    canvas.focus({preventScroll:true});
     return;
   }
   closeEnlarged();
@@ -315,34 +342,126 @@ function toggleHint(buttonId, textId) {
 function draw() {
   camera.draw();
   firing.render(targetButtons);
+  patrol.render(phase==='scan');
   const compass = ['N','NE','E','SE','S','SW','W','NW'];
   byId('heading').textContent = compass[(Math.round(camera.state.yaw/(Math.PI/4))+16)%8];
 }
 
+function setChallengeStatus(text, warning=false) {
+  challengeState.textContent=text;
+  challengeState.dataset.warning=warning;
+}
+
+function ensureLoop() {
+  if(!raf) raf=requestAnimationFrame(tick);
+}
+
+function startActivity() {
+  if(phase!=='scan'||modalIsOpen()||!camera.available||patrol.active) return;
+  patrol.start();
+  setChallengeStatus('假人巡邏中');
+  ensureLoop();
+}
+
+function hitPatrol(index) {
+  if(phase!=='scan'||!patrol.stun(index)) return;
+  byId('hint-text').hidden=false;
+  byId('hint').setAttribute('aria-expanded','true');
+  setChallengeStatus('取得提示');
+  announce('提示 · '+currentRound().hint,false,true);
+  patrol.render();
+}
+
+function handlePatrol(event) {
+  if(event==='warning') setChallengeStatus('假人即將開火',true);
+  if(event==='fire') setChallengeStatus('光彈來襲 · 快閃避',true);
+  if(event==='dodge') setChallengeStatus('成功閃避');
+  if(event!=='hit'&&event!=='defeat') return;
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    damageAnimation?.cancel();
+    damageAnimation=range.querySelector('.damage-vignette').animate([{opacity:1},{opacity:0}],460);
+  }
+  if(event==='hit'){
+    setChallengeStatus('中彈 · 生命 '+patrol.health+' / 3',true);
+    return;
+  }
+  setChallengeStatus('生命值耗盡',true);
+  phase='failed';
+  patrol.stop();
+  moving.clear();
+  resetJump();
+  byId('jump').disabled=true;
+  targetButtons.forEach(button=>{button.disabled=true;});
+  for(const button of keys.children) button.disabled=true;
+  firing.pause();
+  byId('prompt-title').textContent='挑戰失敗';
+  const retry=byId('advance');
+  retry.textContent='重試本題';
+  retry.hidden=false;
+  announce('你被假人射中三次。重試本題繼續挑戰。',true);
+  retry.focus({preventScroll:true});
+}
+
 function tick(t) {
-  const seconds = lastFrame ? Math.min(.06, (t - lastFrame) / 1000) : .016;
-  lastFrame = t;
+  const elapsed=lastFrame?Math.min((t-lastFrame)/1000,.8):.016;
+  lastFrame=t;
+  if(!windowActive||document.hidden||modalIsOpen()){
+    raf=0;
+    lastFrame=0;
+    return;
+  }
+  const seconds=Math.min(.07,elapsed);
   const aimSpeed=firing.turnScale();
-  const rate = 4.35 * seconds * (aimSpeed===1?1:.57);
-  const axis = (pos, neg) => Number(moving.has(pos)) - Number(moving.has(neg));
-  camera.move(rate * axis('d','a'),rate * axis('w','s'));
-  camera.rotate(1.65 * aimSpeed * seconds * axis('arrowright','arrowleft'),1.1 * aimSpeed * seconds * axis('arrowup','arrowdown'));
+  if(moving.size){
+    const rate=4.35*seconds*(aimSpeed===1?1:.57);
+    const axis=(pos,neg)=>Number(moving.has(pos))-Number(moving.has(neg));
+    camera.move(rate*axis('d','a'),rate*axis('w','s'));
+    camera.rotate(1.65*aimSpeed*seconds*axis('arrowright','arrowleft'),1.1*aimSpeed*seconds*axis('arrowup','arrowdown'));
+  }
+  const jumping=jumpTime!==null;
+  if(jumping){
+    jumpTime+=elapsed;
+    camera.state.y=1.70+jumpHeight(jumpTime);
+    if(jumpTime>=.72) resetJump();
+  }
+  if(patrol.active) handlePatrol(patrol.update(elapsed));
+  if(moving.size||jumping) draw();
+  else patrol.render(phase==='scan');
+  raf=(moving.size||jumpTime!==null||patrol.active)?requestAnimationFrame(tick):0;
+  if(!raf) lastFrame=0;
+}
+
+function startJump() {
+  if(phase!=='scan'||modalIsOpen()||!camera.available||jumpTime!==null) return;
+  startActivity();
+  jumpTime=.028;
+  camera.state.y=1.70+jumpHeight(jumpTime);
+  range.dataset.jumping='true';
   draw();
-  raf = moving.size ? requestAnimationFrame(tick) : 0;
-  if (!raf) lastFrame = 0;
+  ensureLoop();
+}
+
+function resetJump(){
+  jumpTime=null;
+  camera.state.y=1.70;
+  delete range.dataset.jumping;
 }
 
 function startMoving(key) {
-  if (modalIsOpen() || !camera.available) return;
+  if (phase!=='scan'||modalIsOpen()||!camera.available) return;
+  startActivity();
   moving.add(key);
-  if (!raf) raf = requestAnimationFrame(tick);
+  ensureLoop();
 }
 
 function closeEnlarged() {
   if (!enlarged) return;
   enlarged = false;
   range.classList.remove('enlarged');
+  byId('question-dock').after(objective);
   byId('expand').setAttribute('aria-pressed','false');
+  byId('expand').setAttribute('aria-label','全屏訓練場');
+  byId('expand').title='全屏訓練場';
   draw();
 }
 
@@ -358,43 +477,75 @@ window.addEventListener('keydown', event => {
   if (['1','2','3'].includes(key) && !event.repeat) select(Number(key)-1);
   if (key === 'q' && !event.repeat) firing.toggleScope();
   if (key === 'r' && !event.repeat) firing.reload();
-  if (key === ' ' && phase === 'scan' && (firing.locked() || !event.target.closest?.('button, a'))) {
+  if (key === ' ' && phase === 'scan' && (range.contains(event.target)||!event.target.closest?.('button, a'))) {
     event.preventDefault();
-    if(!event.repeat) firing.startTrigger('space');
+    if(!event.repeat) startJump();
   }
 });
 window.addEventListener('keyup', event => {
   moving.delete(event.key.toLowerCase());
-  if(event.key===' ') firing.stopTrigger('space');
 });
-window.addEventListener('blur', () => {moving.clear();drag=null;firing.stopTrigger();});
-canvas.addEventListener('pointerdown', event => {
-  if (!camera.available || event.button !== 0) return;
-  if(firing.locked()){
+window.addEventListener('blur',()=>{
+  windowActive=false;
+  moving.clear();
+  drag=null;
+  hoverPoint=null;
+  firing.stopTrigger();
+});
+window.addEventListener('focus',()=>{
+  windowActive=true;
+  if(patrol.active||jumpTime!==null) ensureLoop();
+});
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&(patrol.active||jumpTime!==null)) ensureLoop();
+});
+canvas.addEventListener('pointerdown',event=>{
+  if(!camera.available||event.button!==0||phase!=='scan') return;
+  canvas.focus({preventScroll:true});
+  if(event.pointerType==='mouse'){
     firing.startTrigger('mouse');
     return;
   }
   if(drag) return;
-  canvas.focus({preventScroll:true});
-  drag = {id:event.pointerId,x:event.clientX,y:event.clientY,distance:0};
+  drag={id:event.pointerId,x:event.clientX,y:event.clientY,distance:0};
   canvas.setPointerCapture(event.pointerId);
 });
-canvas.addEventListener('pointermove', event => {
-  if (drag?.id !== event.pointerId) return;
+range.addEventListener('pointerleave',()=>{hoverPoint=null;});
+range.addEventListener('pointermove',event=>{
+  if(phase!=='scan'||modalIsOpen()||!camera.available||firing.locked()) return;
+  if(event.pointerType==='mouse'){
+    if(event.target.closest('.scene-buttons,.scene-bottom,#expanded-question')){
+      hoverPoint=null;
+      return;
+    }
+    const last=hoverPoint;
+    hoverPoint={x:event.clientX,y:event.clientY};
+    if(!last) return;
+    const dx=event.clientX-last.x,dy=event.clientY-last.y;
+    if(!dx&&!dy) return;
+    startActivity();
+    const speed=firing.turnScale();
+    camera.rotate(dx*.0029*speed,-dy*.0026*speed);
+    draw();
+    return;
+  }
+  if(drag?.id!==event.pointerId) return;
   const dx=event.clientX-drag.x, dy=drag.y-event.clientY;
   drag.distance+=Math.hypot(dx,dy);
   Object.assign(drag,{x:event.clientX,y:event.clientY});
   if(drag.distance<3) return;
+  startActivity();
   const speed=firing.turnScale();
   camera.rotate(dx*.006*speed,dy*.005*speed);
   draw();
 });
 document.addEventListener('mousemove', event=>{
-  if(!firing.locked()||modalIsOpen()) return;
+  if(!firing.locked()||phase!=='scan'||modalIsOpen()) return;
   const speed=firing.turnScale();
   camera.rotate(event.movementX*.0029*speed,-event.movementY*.0026*speed);
   draw();
 });
+document.addEventListener('pointerlockchange',()=>{hoverPoint=null;});
 window.addEventListener('pointerup',event=>{
   if(event.button===0) firing.stopTrigger('mouse');
 });
@@ -403,7 +554,7 @@ canvas.addEventListener('pointerup',event=>{
   if(drag.distance<7) firing.fireAtPointer(event.clientX,event.clientY);
   drag=null;
 });
-canvas.addEventListener('lostpointercapture',() => {drag=null;});
+canvas.addEventListener('lostpointercapture',()=>{drag=null;});
 for (const button of document.querySelectorAll('#movement button')) {
   button.addEventListener('pointerdown',event => {
     event.preventDefault();
@@ -416,10 +567,14 @@ byId('expand').addEventListener('click',() => {
   if (enlarged) {closeEnlarged();return;}
   enlarged=true;
   range.classList.add('enlarged');
+  byId('expanded-question').append(objective);
   byId('expand').setAttribute('aria-pressed','true');
+  byId('expand').setAttribute('aria-label','退出全屏');
+  byId('expand').title='退出全屏';
   draw();
 });
-byId('recenter').addEventListener('click',() => {camera.reset();draw();});
+byId('recenter').addEventListener('click',() => {camera.reset();resetJump();draw();});
+byId('jump').addEventListener('click',startJump);
 byId('hint').addEventListener('click',() => toggleHint('hint','hint-text'));
 byId('code-hint').addEventListener('click',() => toggleHint('code-hint','code-hint-text'));
 byId('reveal-targets').addEventListener('click',() => {
@@ -427,6 +582,7 @@ byId('reveal-targets').addEventListener('click',() => {
   byId('reveal-targets').setAttribute('aria-expanded',String(!keys.hidden));
 });
 byId('help').addEventListener('click',() => {moving.clear();firing.pause();draw();helpDialog.showModal();});
+helpDialog.addEventListener('close',()=>{if(patrol.active||jumpTime!==null) ensureLoop();});
 byId('advance').addEventListener('click',next);
 byId('run').addEventListener('click',runCode);
 byId('reset-code').addEventListener('click',() => {
