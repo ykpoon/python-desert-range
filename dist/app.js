@@ -1,6 +1,6 @@
 import {lessons} from './lessons.js';
 import {createWorld} from './world.js';
-import {createFiringRange} from './firing-range.js';
+import {createFiringRange} from './firing-range.js?v=3';
 import {createPatrolView, jumpHeight} from './patrol.js';
 
 const byId = id => document.getElementById(id);
