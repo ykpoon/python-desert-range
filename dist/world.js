@@ -41,7 +41,7 @@ function buildMesh() {
     quad([l,b,k],[l,b,f],[l,t,f],[l,t,k], color, material);
     quad([r,b,f],[r,b,k],[r,t,k],[r,t,f], color, material);
     quad([l,t,f],[r,t,f],[r,t,k],[l,t,k], color, material);
-    if (solid) colliders.push([l, r, k, f]);
+    if (solid) colliders.push([l, r, k, f, b, t]);
   }
 
   function shadow(x, z, w, d, opacity = 0.69) {
@@ -396,8 +396,8 @@ export function createWorld(canvas) {
   const gl = canvas.getContext('webgl',{antialias:true,alpha:true,powerPreference:'low-power'});
   const {vertices,colliders}=buildMesh();
   let draw = () => {};
-  let focalX = 1, focalY = 1;
-  const camera = { state, available:Boolean(gl), draw:()=>draw(), reset, project, move, rotate, useSoftware };
+  let focalX = 1, focalY = 1, zoom=1;
+  const camera = { state, available:Boolean(gl), draw:()=>draw(), reset, project, move, rotate, useSoftware, hasLineOfSight, setZoom };
   let lastWidth=0, lastHeight=0;
   let activeCanvas=canvas;
 
@@ -410,7 +410,7 @@ export function createWorld(canvas) {
     const width=dimensions.width || 1, height=dimensions.height || 1;
     const aspect=width/height;
     focalY=1/Math.tan(51*radians/2);
-    focalX=Math.min(focalY/aspect,1.09);
+    focalX=Math.min(focalY/aspect,1.09)*zoom;
     focalY=focalX*aspect;
     if(width!==lastWidth || height!==lastHeight){
       const density=Math.min(window.devicePixelRatio||1,1.65);
@@ -429,6 +429,32 @@ export function createWorld(canvas) {
     const up=p[1]*Math.cos(state.pitch)-dir*Math.sin(state.pitch);
     const depth=p[1]*Math.sin(state.pitch)+dir*Math.cos(state.pitch);
     return {x:.5+.5*side*focalX/depth,y:.5-.5*up*focalY/depth,depth};
+  }
+
+  function setZoom(value) {
+    zoom=value;
+  }
+
+  function hasLineOfSight(x,y,z) {
+    const ray=[x-state.x,y-state.y,z-state.z];
+    const origin=[state.x,state.y,state.z];
+    return !colliders.some(([l,r,k,f,b,t])=>{
+      const limits=[[l,r],[b,t],[k,f]];
+      let near=0, far=.995;
+      for(let axis=0;axis<3;axis++){
+        const [min,max]=limits[axis];
+        if(Math.abs(ray[axis])<.00001){
+          if(origin[axis]<min||origin[axis]>max) return false;
+          continue;
+        }
+        const atMin=(min-origin[axis])/ray[axis];
+        const atMax=(max-origin[axis])/ray[axis];
+        near=Math.max(near,Math.min(atMin,atMax));
+        far=Math.min(far,Math.max(atMin,atMax));
+        if(near>far) return false;
+      }
+      return true;
+    });
   }
 
   function move(strafe, forward) {

@@ -1,0 +1,89 @@
+.range {
+  --optic-radius: min(39cqh, 44cqw);
+  container-type: size;
+  cursor: crosshair;
+}
+#viewmodel, #shot-fx, .scope, #hit-mark { pointer-events: none; }
+#viewmodel { transform-origin: 73% 95%; }
+.range[data-locked="true"] { cursor: none; }
+.range[data-locked="true"] .world-target { pointer-events: none; }
+.range[data-scoped="true"] #viewmodel, .range[data-scoped="true"] .crosshair { visibility: hidden; }
+.scope { position: absolute; inset: 0; display: none; }
+.range[data-scoped="true"] .scope { display: block; }
+.scope-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: calc(var(--optic-radius) * 2); height: calc(var(--optic-radius) * 2);
+  transform: translate(-50%,-50%);
+  border: 3px solid #172029;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle, transparent 48%, #14252340 78%, #050d16a8 100%);
+  box-shadow: 0 0 0 110vmax #080b0ded, inset 0 0 18px #14212a8a, 0 0 0 5px #59646988;
+}
+.scope-marks { position: absolute; background: #161e20; display: block; inset: 50% auto auto 50%; transform: translate(-50%,-50%); }
+.scope-marks.horizontal { height: 1px; width: 100%; box-shadow: 0 1px #dedfc683; }
+.scope-marks.vertical { width: 1px; height: 100%; box-shadow: 1px 0 #dedfc683; }
+.scope-marks.horizontal::after, .scope-marks.vertical::after {
+  content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+}
+.scope-marks.horizontal::after { height: 7px; width: 32%; background: repeating-linear-gradient(90deg,#182020 0 1px, transparent 1px 14%); }
+.scope-marks.vertical::after { height: 31%; width: 7px; background: repeating-linear-gradient(#182020 0 1px, transparent 1px 14%); }
+.scope-ring strong { position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%); font: 700 15px var(--mono); color: #f3e8c9; text-shadow: 0 1px 3px #121b19; }
+.crosshair { width: 34px; height: 34px; }
+.crosshair span { width: 29px; }
+.crosshair b { height: 29px; }
+.crosshair i { width: 9px; height: 9px; }
+.range[data-weapon="shotgun"] .crosshair { border-radius:50%; border:1px solid #fff9db; width:46px; height:46px; }
+.range[data-weapon="rifle"] .crosshair { color:#d8ffcf; }
+#hit-mark { position: absolute; display: none; z-index: 1; translate:-50% -50%; width:30px; height:30px; }
+#hit-mark::before, #hit-mark::after { content:""; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(45deg); width:29px; height:3px; border-radius:5px; background:#fff6cd; box-shadow:0 0 4px #192220; }
+#hit-mark::after { transform:translate(-50%,-50%) rotate(-45deg); }
+#hit-mark.active { display:block; }
+#shot-fx { opacity:0; }
+.weapon-readout {
+  position:absolute; z-index:2; bottom:69px; right:15px;
+  display:flex; align-items:center; gap:11px;
+  padding:7px 10px; min-height:37px; border:1px solid #edcb8a70;
+  background:#19211def; color:#f4e6c8; border-radius:6px;
+  font-size:14px; pointer-events:none;
+}
+.ammo-count { font: 600 15px var(--mono); color:#e1d7be; white-space:nowrap; }
+.ammo-count b { color:var(--amber); }
+#weapon-status:empty { display:none; }
+#weapon-status { color:#ffde92; border-left:1px solid #ecce8752; padding-left:8px; }
+.weapon-controls { display:flex; align-items:center; gap:6px; margin-left:auto; pointer-events:auto; }
+.range-control {
+  display:inline-flex; align-items:center; justify-content:center; gap:5px;
+  min-width:46px; min-height:46px; border:1px solid #d6d1ae6d; background:#19221df2;
+  color:#fff0c9; padding:6px 9px; touch-action:none; font-size:14px; white-space:nowrap;
+}
+.range-control svg { width:16px; height:16px; }
+.range-control.fire { border-color:#f4bb67; color:#251c10; background:#f4bb67; font-weight:750; }
+.range-control[aria-pressed="true"], .range-control:hover:not(:disabled) { border-color:#ffda9f; background:#403528; color:#fff0c9; }
+.range-control:disabled { opacity:.63; }
+.movement button { min-width:44px; }
+.weapon-style { font: 600 13px/1.5 var(--mono); color:#bac5b7; padding-bottom:4px; }
+.world-target { display:grid; place-items:center; min-width:47px; min-height:47px; width:47px; height:47px; padding:0; overflow:visible; }
+.world-target .target-ring { width:var(--plate-size,44px)!important; height:var(--plate-size,44px)!important; }
+.world-target .target-ring svg { width:61%; height:61%; }
+.world-target .target-caption { position:absolute; top:calc(50% + var(--plate-size,44px)*.67); left:50%; transform:translateX(-50%); }
+.world-target[data-hit="wrong"] .target-ring { scale:.89; }
+#mute[aria-pressed="true"] svg { opacity:.40; }
+@media(max-width:600px) {
+  .movement {display:grid;grid-template-columns:repeat(3,40px);gap:3px}
+  .movement button {min-width:40px;min-height:41px;padding:1px}
+  .movement [data-key="w"] {grid-column:2;grid-row:1}
+  .movement [data-key="a"] {grid-column:1;grid-row:2}
+  .movement [data-key="s"] {grid-column:2;grid-row:2}
+  .movement [data-key="d"] {grid-column:3;grid-row:2}
+  .range-control {padding:5px;gap:3px;min-height:43px}
+  .weapon-controls {gap:4px}
+  .weapon-readout {right:9px;bottom:64px;gap:6px}
+  .scene-buttons {gap:4px}
+  .scene-buttons button {width:33px}
+}
+@media(pointer:coarse) {
+  .mouse-aim {display:none}
+  .movement button,.range-control {min-height:44px}
+}

@@ -4,10 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#141817">
-  <meta name="description" content="走進 3D 沙城，鎖定資料靶，練習 Python 資料類型、print、list 和 for 迴圈。">
+  <meta name="description" content="走進 3D 沙城，瞄準資料靶，練習 Python 資料類型、print、list 和 for 迴圈。">
   <title>Python 沙城訓練場</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./range.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
@@ -27,6 +28,8 @@
     <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6m-5 3h4m-5-6v-1a5 5 0 1 1 6 0v1Z"/></symbol>
     <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></symbol>
+    <symbol id="i-mouse" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="6"/><path d="M12 6v4"/></symbol>
+    <symbol id="i-audio" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3zM16 9a4 4 0 0 1 0 6m2-9a8 8 0 0 1 0 12"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 12 7-12 7Z"/></symbol>
   </defs></svg>
   <header class="topbar">
@@ -52,43 +55,58 @@
         <div class="round-indicator"><span id="round"></span><div id="round-pips" aria-hidden="true"></div></div>
       </header>
       <section class="range" id="range" aria-label="第一人稱沙城訓練場">
-        <canvas id="world" aria-hidden="true"></canvas>
+        <canvas id="world" tabindex="-1" aria-hidden="true"></canvas>
         <div class="world-vignette"></div>
         <div class="range-top">
           <div class="location"><span class="location-dot"></span><span id="location-name">沙城訓練場</span></div>
           <div class="compass" aria-hidden="true"><span>NW</span><i></i><b id="heading">N</b><i></i><span>NE</span></div>
           <div class="scene-buttons">
+            <button class="icon-button mouse-aim" id="mouse-aim" type="button" title="滑鼠瞄準" aria-label="滑鼠瞄準" aria-pressed="false"><svg aria-hidden="true"><use href="#i-mouse"></use></svg></button>
+            <button class="icon-button" id="mute" type="button" title="靜音" aria-label="靜音" aria-pressed="false"><svg aria-hidden="true"><use href="#i-audio"></use></svg></button>
             <button class="icon-button" id="recenter" type="button" title="返回起點" aria-label="返回起點"><svg aria-hidden="true"><use href="#i-target"></use></svg></button>
             <button class="icon-button" id="expand" type="button" title="放大訓練場" aria-label="放大訓練場" aria-pressed="false"><svg aria-hidden="true"><use href="#i-expand"></use></svg></button>
           </div>
         </div>
+        <canvas id="viewmodel" aria-hidden="true"></canvas>
         <div id="targets" aria-label="資料靶"></div>
+        <canvas id="shot-fx" aria-hidden="true"></canvas>
+        <div class="scope" aria-hidden="true">
+          <div class="scope-ring"><span class="scope-marks horizontal"></span><span class="scope-marks vertical"></span><strong>3×</strong></div>
+        </div>
         <div class="crosshair" aria-hidden="true"><span></span><i></i><b></b></div>
-        <div class="sweep" id="sweep" aria-hidden="true"></div>
+        <div id="hit-mark" aria-hidden="true"></div>
+        <div class="weapon-readout">
+          <span id="weapon-name"></span>
+          <span class="ammo-count" aria-label="彈量"><b id="ammo"></b><span> / </span><span id="capacity"></span></span>
+          <span id="weapon-status" role="status"></span>
+        </div>
         <div class="feedback" id="feedback" role="status" aria-live="polite" hidden></div>
         <div class="scene-bottom">
           <div class="movement" id="movement" aria-label="移動控制">
             <button type="button" data-key="a" aria-label="向左移動">◀</button><button type="button" data-key="w" aria-label="向前移動">▲</button><button type="button" data-key="s" aria-label="向後移動">▼</button><button type="button" data-key="d" aria-label="向右移動">▶</button>
           </div>
-          <span class="scan-label"><svg aria-hidden="true"><use href="#i-target"></use></svg> 資料掃描器</span>
-          <button type="button" class="scan-button" id="scan"><svg aria-hidden="true"><use href="#i-target"></use></svg> 掃描</button>
+          <div class="weapon-controls">
+            <button type="button" class="range-control" id="aim" aria-pressed="false" hidden><svg aria-hidden="true"><use href="#i-target"></use></svg><span>開鏡</span></button>
+            <button type="button" class="range-control" id="reload"><svg aria-hidden="true"><use href="#i-loop"></use></svg><span>換彈</span></button>
+            <button type="button" class="range-control fire" id="fire"><svg aria-hidden="true"><use href="#i-target"></use></svg><span>開火</span></button>
+          </div>
         </div>
       </section>
       <section class="objective" aria-labelledby="prompt-title">
         <span class="objective-icon"><svg aria-hidden="true"><use href="#i-target"></use></svg></span>
-        <div class="objective-copy"><p class="objective-label" id="prompt-title">掃描任務</p><p id="prompt"></p><p id="hint-text" hidden></p></div>
+        <div class="objective-copy"><p class="objective-label" id="prompt-title">射擊任務</p><p class="weapon-style" id="weapon-style"></p><p id="prompt"></p><p id="hint-text" hidden></p></div>
         <div class="objective-actions"><button class="quiet-button" id="hint" type="button" aria-expanded="false"><svg aria-hidden="true"><use href="#i-bulb"></use></svg> 提示</button><button class="primary" id="advance" type="button" hidden></button></div>
       </section>
-      <footer class="controls"><svg aria-hidden="true"><use href="#i-keyboard"></use></svg><span class="desktop-controls"><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> 移動 <i></i> 拖曳轉視角 <i></i> 點選資料靶／<kbd>Space</kbd> 掃描</span><span class="touch-controls">方向鍵移動 · 拖動畫面 · 輕觸資料靶</span><button class="text-button" id="reveal-targets" type="button" aria-controls="target-keys" aria-expanded="false">鍵盤選靶</button></footer>
+      <footer class="controls"><svg aria-hidden="true"><use href="#i-keyboard"></use></svg><span class="desktop-controls"><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> 移動 <i></i> 滑鼠／拖曳瞄準 <i></i> <kbd>Space</kbd> 開火 <i></i> <kbd>R</kbd> 換彈</span><span class="touch-controls">按住方向鍵移動 · 拖曳瞄準 · 按「開火」</span><button class="text-button" id="reveal-targets" type="button" aria-controls="target-keys" aria-expanded="false">鍵盤選靶</button></footer>
       <div id="target-keys" hidden aria-label="鍵盤選靶"></div>
     </main>
   </div>
   <dialog id="help-dialog" aria-labelledby="help-title">
     <div class="dialog-head"><div><p class="eyebrow">訓練指南</p><h2 id="help-title">操作說明</h2></div><form method="dialog"><button class="icon-button close" aria-label="關閉">×</button></form></div>
     <ul class="help-list">
-      <li><b>電腦</b><span>按 WASD 移動，拖曳畫面或用方向鍵轉視角。點一下靶，或用準星對準後按空白鍵掃描。按 1、2、3 可直接選靶。</span></li>
-      <li><b>iPad</b><span>按住畫面左下方向鍵移動，拖動畫面轉視角。輕觸資料靶即可掃描。</span></li>
-      <li><b>關卡</b><span>掃描正確的資料靶後，可看解說或完成程式任務。每題首次完成得 100 分。</span></li>
+      <li><b>電腦</b><span>按 WASD 移動。按場內滑鼠圖示鎖定滑鼠，再移動滑鼠瞄準及左擊開火，按 Esc 離開。亦可拖曳或用方向鍵瞄準，按空白鍵開火。按 R 換彈，狙擊槍用右擊或 Q 開鏡。</span></li>
+      <li><b>iPad</b><span>按住左下方向鍵移動，在場內拖曳來瞄準，按右下「開火」。也可輕觸靶射擊，或用「開鏡」放大。</span></li>
+      <li><b>關卡</b><span>命中正確資料靶後，可看解說或完成程式任務。步槍可按住連射，散彈槍要走近使用。每題首次完成得 100 分。</span></li>
       <li><b>進度</b><span>完成關卡及得分會保存在目前瀏覽器。通關後可重玩任何關卡。</span></li>
     </ul>
   </dialog>

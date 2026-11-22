@@ -1,10 +1,10 @@
 import {lessons} from './lessons.js';
 import {createWorld} from './world.js';
+import {createFiringRange} from './firing-range.js';
 
 const byId = id => document.getElementById(id);
 const icon = name => '<svg aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
 const storageKey = 'desert-code-range-progress-v1';
-const positions = [[-3.9, 2.08, -1.5], [0, 2.56, -2.2], [3.9, 2.08, -1.5]];
 const lessonCount = lessons.length;
 
 function restore() {
@@ -50,6 +50,11 @@ const feedback = byId('feedback');
 const keys = byId('target-keys');
 const currentRound = () => lessons[lesson].rounds[round];
 const modalIsOpen = () => helpDialog.open || codeDialog.open || finishDialog.open;
+const firing = createFiringRange({
+  range, canvas, camera, draw, announce, onHit:select,
+  canShoot:()=>phase==='scan'&&!modalIsOpen(),
+  isMoving:()=>['w','a','s','d'].some(key=>moving.has(key)),
+});
 
 function startLesson(index) {
   if (!unlocked(index)) return;
@@ -100,14 +105,14 @@ function renderRound() {
     else if (profile.scored.has(lesson + ':' + index)) pip.className='done';
     return pip;
   }));
-  byId('prompt-title').textContent = '掃描任務';
+  byId('prompt-title').textContent = '射擊任務';
   byId('prompt').textContent = challenge.prompt;
   byId('hint-text').hidden = true;
   byId('hint').setAttribute('aria-expanded','false');
   byId('hint-text').textContent = challenge.hint;
   byId('advance').hidden = true;
   feedback.hidden = true;
-  byId('scan').disabled = false;
+  firing.reset(lesson);
   stopWorker();
   targetButtons = challenge.options.map((name, index) => {
     const button = document.createElement('button');
@@ -117,7 +122,7 @@ function renderRound() {
     button.innerHTML = '<span class="target-ring">' + icon('code') + '</span><span class="target-caption"><small>' + (index+1) + '</small><span></span></span>';
     button.querySelector('.target-caption span').textContent = name;
     button.setAttribute('aria-label','資料靶 ' + (index + 1) + '，' + name);
-    button.addEventListener('click',() => select(index));
+    button.addEventListener('click',() => firing.fireAtTarget(index));
     return button;
   });
   byId('targets').replaceChildren(...targetButtons);
@@ -133,12 +138,6 @@ function renderRound() {
   draw();
 }
 
-function flash() {
-  const sweep = byId('sweep');
-  sweep.classList.remove('flash');
-  requestAnimationFrame(() => sweep.classList.add('flash'));
-}
-
 function announce(text, error = false, auto = false) {
   clearTimeout(monitor);
   feedback.textContent = text;
@@ -150,11 +149,10 @@ function announce(text, error = false, auto = false) {
 function select(index) {
   if (phase !== 'scan') return;
   const challenge = currentRound();
-  flash();
   targetButtons.forEach(button => delete button.dataset.hit);
   if (index !== challenge.correct) {
     targetButtons[index].dataset.hit = 'wrong';
-    announce('未命中。再讀一次題目，或者看看提示。',true,true);
+    announce('擊中錯誤答案。再讀一次題目，或者看看提示。',true,true);
     return;
   }
 
@@ -162,8 +160,9 @@ function select(index) {
   targetButtons[index].dataset.hit = 'correct';
   targetButtons.forEach(button => {button.disabled = true;});
   Array.from(keys.children).forEach(button => {button.disabled = true;});
-  byId('scan').disabled = true;
-  byId('prompt-title').textContent = '掃描成功';
+  firing.pause(!challenge.code);
+  draw();
+  byId('prompt-title').textContent = '命中正確答案';
   byId('prompt').textContent = challenge.explanation;
   byId('hint-text').hidden = true;
   byId('hint').setAttribute('aria-expanded','false');
@@ -210,6 +209,8 @@ function next() {
     : '本關 ' + lessons[lesson].rounds.length + ' 項任務已完成。下一關「' + lessons[lesson + 1].name + '」已解鎖。';
   byId('finish-action').textContent = final ? '返回首關' : '進入下一關';
   moving.clear();
+  firing.pause();
+  draw();
   finishDialog.showModal();
 }
 
@@ -227,6 +228,8 @@ function prepareCode(task) {
 
 function openCode() {
   moving.clear();
+  firing.pause();
+  draw();
   closeEnlarged();
   if (!codeDialog.open) codeDialog.showModal();
 }
@@ -311,12 +314,7 @@ function toggleHint(buttonId, textId) {
 
 function draw() {
   camera.draw();
-  for (const [index, button] of targetButtons.entries()) {
-    const point = camera.available ? camera.project(...positions[index]) : {x:.19+index*.31,y:.45,depth:1};
-    button.hidden = point.depth < .6 || point.x < .05 || point.x > .95 || point.y < .13 || point.y > .88;
-    button.style.left = 100 * point.x + '%';
-    button.style.top = 100 * point.y + '%';
-  }
+  firing.render(targetButtons);
   const compass = ['N','NE','E','SE','S','SW','W','NW'];
   byId('heading').textContent = compass[(Math.round(camera.state.yaw/(Math.PI/4))+16)%8];
 }
@@ -324,10 +322,11 @@ function draw() {
 function tick(t) {
   const seconds = lastFrame ? Math.min(.06, (t - lastFrame) / 1000) : .016;
   lastFrame = t;
-  const rate = 4.35 * seconds;
+  const aimSpeed=firing.turnScale();
+  const rate = 4.35 * seconds * (aimSpeed===1?1:.57);
   const axis = (pos, neg) => Number(moving.has(pos)) - Number(moving.has(neg));
   camera.move(rate * axis('d','a'),rate * axis('w','s'));
-  camera.rotate(1.65 * seconds * axis('arrowright','arrowleft'),1.1 * seconds * axis('arrowup','arrowdown'));
+  camera.rotate(1.65 * aimSpeed * seconds * axis('arrowright','arrowleft'),1.1 * aimSpeed * seconds * axis('arrowup','arrowdown'));
   draw();
   raf = moving.size ? requestAnimationFrame(tick) : 0;
   if (!raf) lastFrame = 0;
@@ -337,19 +336,6 @@ function startMoving(key) {
   if (modalIsOpen() || !camera.available) return;
   moving.add(key);
   if (!raf) raf = requestAnimationFrame(tick);
-}
-
-function scanCenter() {
-  if (phase !== 'scan') return;
-  const rect = range.getBoundingClientRect();
-  const middle = {x:rect.left + rect.width / 2, y:rect.top + rect.height / 2};
-  const index = targetButtons.findIndex(button => {
-    if (button.hidden) return false;
-    const r = button.getBoundingClientRect();
-    return middle.x >= r.left && middle.x <= r.right && middle.y >= r.top && middle.y <= r.bottom;
-  });
-  if (index >= 0) select(index);
-  else announce('準星未對準資料靶。亦可直接點選靶。',true,true);
 }
 
 function closeEnlarged() {
@@ -366,28 +352,56 @@ window.addEventListener('keydown', event => {
   const key = event.key.toLowerCase();
   if (key === 'escape') { closeEnlarged(); return; }
   if (moveKeys.includes(key)) {
-    if (event.target.closest?.('button, a') && key.startsWith('arrow')) return;
     event.preventDefault();
     startMoving(key);
   }
   if (['1','2','3'].includes(key) && !event.repeat) select(Number(key)-1);
-  if (key === ' ' && !event.repeat && !event.target.closest?.('button, a')) {
+  if (key === 'q' && !event.repeat) firing.toggleScope();
+  if (key === 'r' && !event.repeat) firing.reload();
+  if (key === ' ' && phase === 'scan' && (firing.locked() || !event.target.closest?.('button, a'))) {
     event.preventDefault();
-    scanCenter();
+    if(!event.repeat) firing.startTrigger('space');
   }
 });
-window.addEventListener('keyup', event => moving.delete(event.key.toLowerCase()));
-window.addEventListener('blur', () => {moving.clear();drag=null;});
+window.addEventListener('keyup', event => {
+  moving.delete(event.key.toLowerCase());
+  if(event.key===' ') firing.stopTrigger('space');
+});
+window.addEventListener('blur', () => {moving.clear();drag=null;firing.stopTrigger();});
 canvas.addEventListener('pointerdown', event => {
-  if (!camera.available || event.button !== 0 || !event.isPrimary) return;
-  drag = {id:event.pointerId,x:event.clientX,y:event.clientY};
+  if (!camera.available || event.button !== 0) return;
+  if(firing.locked()){
+    firing.startTrigger('mouse');
+    return;
+  }
+  if(drag) return;
+  canvas.focus({preventScroll:true});
+  drag = {id:event.pointerId,x:event.clientX,y:event.clientY,distance:0};
   canvas.setPointerCapture(event.pointerId);
 });
 canvas.addEventListener('pointermove', event => {
   if (drag?.id !== event.pointerId) return;
-  camera.rotate((event.clientX-drag.x)*.006,(drag.y-event.clientY)*.005);
+  const dx=event.clientX-drag.x, dy=drag.y-event.clientY;
+  drag.distance+=Math.hypot(dx,dy);
   Object.assign(drag,{x:event.clientX,y:event.clientY});
+  if(drag.distance<3) return;
+  const speed=firing.turnScale();
+  camera.rotate(dx*.006*speed,dy*.005*speed);
   draw();
+});
+document.addEventListener('mousemove', event=>{
+  if(!firing.locked()||modalIsOpen()) return;
+  const speed=firing.turnScale();
+  camera.rotate(event.movementX*.0029*speed,-event.movementY*.0026*speed);
+  draw();
+});
+window.addEventListener('pointerup',event=>{
+  if(event.button===0) firing.stopTrigger('mouse');
+});
+canvas.addEventListener('pointerup',event=>{
+  if(drag?.id!==event.pointerId) return;
+  if(drag.distance<7) firing.fireAtPointer(event.clientX,event.clientY);
+  drag=null;
 });
 canvas.addEventListener('lostpointercapture',() => {drag=null;});
 for (const button of document.querySelectorAll('#movement button')) {
@@ -406,14 +420,13 @@ byId('expand').addEventListener('click',() => {
   draw();
 });
 byId('recenter').addEventListener('click',() => {camera.reset();draw();});
-byId('scan').addEventListener('click',scanCenter);
 byId('hint').addEventListener('click',() => toggleHint('hint','hint-text'));
 byId('code-hint').addEventListener('click',() => toggleHint('code-hint','code-hint-text'));
 byId('reveal-targets').addEventListener('click',() => {
   keys.hidden=!keys.hidden;
   byId('reveal-targets').setAttribute('aria-expanded',String(!keys.hidden));
 });
-byId('help').addEventListener('click',() => {moving.clear();helpDialog.showModal();});
+byId('help').addEventListener('click',() => {moving.clear();firing.pause();draw();helpDialog.showModal();});
 byId('advance').addEventListener('click',next);
 byId('run').addEventListener('click',runCode);
 byId('reset-code').addEventListener('click',() => {
@@ -443,6 +456,7 @@ canvas.addEventListener('webglcontextlost', event => {
   event.preventDefault();
   moving.clear();
   camera.useSoftware();
+  firing.updateHud();
   if (!camera.available) {
     range.classList.add('fallback');
     announce('3D 畫面暫停。你仍可點選資料靶完成任務。',false,true);

@@ -16,7 +16,7 @@ export const lessons = [
         explanation: '-5 沒有引號及小數點，屬於整數 int。',
       },
       {
-        prompt: '"2" + "3" 的結果是甚麼？掃描正確的輸出。',
+        prompt: '"2" + "3" 的結果是甚麼？射中正確的輸出。',
         options: ['5', '"23"', '23'], correct: 1,
         hint: '兩個字串使用 + 時，Python 會把文字接起來。',
         explanation: '"2" + "3" 把兩段文字接起來，結果是字串 "23"。',
@@ -154,7 +154,7 @@ export const lessons = [
         explanation: 'status[1] 的值是 6，屬於 int。',
       },
       {
-        prompt: '你要依序輸出清單內所有項目。先掃描可放入控制台的正確迴圈開首。',
+        prompt: '你要依序輸出清單內所有項目。先射中可放入控制台的正確迴圈開首。',
         options: ['for x in codes:', 'print(codes)', 'for codes:'], correct: 0,
         hint: 'for 後面是接收每一項的變數，in 後面是要遍歷的列表。',
         explanation: 'for x in codes: 可逐個讀取 codes，再用 print() 顯示每項。',
