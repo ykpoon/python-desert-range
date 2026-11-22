@@ -33,7 +33,7 @@ export function createPatrol() {
     if(!count) return null;
     if(shot?.kind==='flight'&&elapsed>=shot.at+.72) {
       const dodged= Math.hypot(camera.state.x-shot.x,camera.state.z-shot.z)>.67
-        || camera.state.y-baseEyeHeight>.32 || !camera.hasLineOfSight(...position(shot.robot));
+        || camera.state.y-baseEyeHeight>.32 || !camera.hasLineOfSight(...shot.from);
       shot=null;
       if(!dodged) count--;
       return dodged?'dodge':count?'hit':'defeat';
@@ -43,7 +43,7 @@ export function createPatrol() {
         shot=null;
         return null;
       }
-      shot={kind:'flight',robot:shot.robot,at:elapsed,x:camera.state.x,z:camera.state.z};
+      shot={kind:'flight',robot:shot.robot,at:elapsed,from:position(shot.robot),x:camera.state.x,z:camera.state.z};
       return 'fire';
     }
     if(!shot&&elapsed>=nextAttack){
@@ -76,9 +76,10 @@ export function createPatrol() {
   };
 }
 
-export function createPatrolView({range,camera,onTarget}) {
+export function createPatrolView({range,camera,onTarget,getAim}) {
   const layer=document.getElementById('patrol-targets');
   const bolt=document.getElementById('patrol-bolt');
+  const trail=document.getElementById('patrol-trail');
   const hearts=document.getElementById('health');
   const patrol=createPatrol();
   const buttons=patrol.robots.map((robot,i)=>{
@@ -86,8 +87,10 @@ export function createPatrolView({range,camera,onTarget}) {
     button.type='button';
     button.className='training-robot';
     button.setAttribute('aria-label','訓練假人 '+(i+1));
-    button.innerHTML='<span class="robot-head"></span><span class="robot-body"></span><span class="robot-arm left"></span><span class="robot-arm right"></span><span class="robot-leg left"></span><span class="robot-leg right"></span><span class="robot-label">提示</span>';
-    button.addEventListener('click',()=>onTarget(robot.id));
+    button.innerHTML='<span class="robot-head"></span><span class="robot-body"></span><span class="robot-arm left"></span><span class="robot-arm right"></span><span class="robot-leg left"></span><span class="robot-leg right"></span><span class="robot-blaster"><span class="robot-muzzle"></span></span><span class="robot-label">提示</span>';
+    button.addEventListener('click',event=>{
+      if(event.detail===0||event.pointerType==='touch'||event.pointerType==='pen') onTarget(robot.id);
+    });
     return button;
   });
   layer.replaceChildren(...buttons);
@@ -96,24 +99,28 @@ export function createPatrolView({range,camera,onTarget}) {
   function render(show=true){
     const width=range.clientWidth, height=range.clientHeight;
     const scoped=range.dataset.scoped==='true';
+    const aim=getAim();
     const attack=patrol.attack;
     layer.dataset.live=active&&show;
-    let origin;
+    function robotSize(depth){
+      return Math.max(32,Math.min(height*.59,height*(scoped?3:1)*1.79/depth));
+    }
     targets=[];
     for(const [i,robot] of patrol.robots.entries()){
       const button=buttons[i];
       const position=patrol.position(robot);
       const point=camera.available&&camera.project(...position);
       const x=point?.x*width,y=point?.y*height;
-      const size=Math.max(32,Math.min(height*.59,height*(scoped?3:1)*1.79/(point?.depth||1)));
+      const size=robotSize(point?.depth||1);
       const visible=show&&point&&point.depth>.65&&point.x>.035&&point.x<.965&&point.y>.14&&point.y<.85
-        && (!scoped||Math.hypot(x-width/2,y-height/2)<Math.min(height*.39,width*.44)-size*.19)
+        && (!scoped||Math.hypot(x-aim.x,y-aim.y)<Math.min(height*.39,width*.44)-size*.19)
         && camera.hasLineOfSight(...position);
       button.hidden=!visible;
       if(!visible) continue;
       button.style.left=x+'px';
       button.style.top=y+'px';
       button.style.setProperty('--robot-size',size+'px');
+      button.dataset.facing=x<width/2?'right':'left';
       const stunned=robot.until>patrol.time;
       button.dataset.state=stunned?'stunned':attack?.robot===robot?attack.kind:'patrol';
       button.disabled=stunned;
@@ -121,17 +128,23 @@ export function createPatrolView({range,camera,onTarget}) {
         const distance=Math.hypot(position[0]-camera.state.x,position[1]-camera.state.y,position[2]-camera.state.z);
         targets.push({x,y,depth:distance,index:robot.id,radius:Math.max(17,size*.24)});
       }
-      if(attack?.robot===robot) origin={x,y};
     }
-    bolt.hidden=attack?.kind!=='flight'||!show;
+    bolt.hidden=trail.hidden=attack?.kind!=='flight'||!show;
     if(bolt.hidden) return;
-    const from=origin??{x:attack.robot.side<0?0:width,y:height*.45};
+    const origin=camera.project(...attack.from);
+    const muzzleX=origin.x*width+robotSize(Math.max(.6,origin.depth))*.31*(origin.x<.5?1:-1);
+    const muzzleY=origin.y*height-robotSize(Math.max(.6,origin.depth))*.03;
+    const from=origin.depth>.55 ? {x:muzzleX,y:muzzleY} : {x:attack.robot.side<0?0:width,y:height*.42};
     const progress=Math.min(1,(patrol.time-attack.at)/.72);
     const x=from.x+(width*.5-from.x)*progress;
     const y=from.y+(height*.49-from.y)*progress;
     bolt.style.left=x+'px';
     bolt.style.top=y+'px';
     bolt.style.transform='translate(-50%, -50%) scale('+(1+progress*2)+')';
+    trail.style.left=from.x+'px';
+    trail.style.top=from.y+'px';
+    trail.style.width=Math.hypot(x-from.x,y-from.y)+'px';
+    trail.style.transform='rotate('+Math.atan2(y-from.y,x-from.x)+'rad)';
   }
 
   function updateHealth(){

@@ -16,7 +16,41 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
   let shotUntil=0, lastFire=-Infinity, burst=0, reloadTimer=0, actionTimer=0, repeatTimer=0, trigger=null;
   let width=1, height=1, previousWidth=0, previousHeight=0, muzzle={x:0,y:0}, targets=[], recoilAnimation, shotAnimation, hitAnimation;
   try { muted=localStorage.getItem('desert-code-muted')==='yes'; } catch {}
+  let pointerAim=null, aim=null;
   const locked=()=>document.pointerLockElement===canvas;
+  const center=()=>({x:width/2,y:height/2});
+  const aimPoint=()=>aim??center();
+
+  function syncAim() {
+    if(!pointerAim||locked()){
+      aim=null;
+      delete range.dataset.pointerAim;
+      range.style.removeProperty('--aim-x');
+      range.style.removeProperty('--aim-y');
+      return;
+    }
+    const bounds=canvas.getBoundingClientRect();
+    const x=pointerAim.x-bounds.left,y=pointerAim.y-bounds.top;
+    if(x<0||y<0||x>bounds.width||y>bounds.height){
+      clearPointerAim();
+      return;
+    }
+    aim={x,y};
+    range.dataset.pointerAim='true';
+    range.style.setProperty('--aim-x',x+'px');
+    range.style.setProperty('--aim-y',y+'px');
+  }
+
+  function setPointerAim(x,y) {
+    pointerAim={x,y};
+  }
+
+  function clearPointerAim() {
+    if(!pointerAim&&!aim) return false;
+    pointerAim=null;
+    syncAim();
+    return true;
+  }
   const turnScale=()=>scoped ? .40 : 1;
 
   function play(kind) {
@@ -58,6 +92,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
 
   function reset(lesson) {
     stopTrigger();
+    clearPointerAim();
     clearTimeout(reloadTimer);
     reloadTimer=0;
     recoilAnimation?.cancel();
@@ -82,6 +117,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
 
   function pause(keepScope=false) {
     stopTrigger();
+    clearPointerAim();
     if(reloadTimer) recoilAnimation?.cancel();
     clearTimeout(reloadTimer);
     reloadTimer=0;
@@ -94,6 +130,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
   function render(buttons) {
     width=range.clientWidth||1;
     height=range.clientHeight||1;
+    syncAim();
     if(width!==previousWidth||height!==previousHeight){
       const density=Math.min(window.devicePixelRatio||1,1.75);
       shotCanvas.width=Math.round(width*density);
@@ -104,6 +141,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
     }
     muzzle=viewModel(key,width,height);
     const positions=key==='sniper'?sniperPositions:key==='shotgun'?shotgunPositions:normalPositions;
+    const optic=aimPoint();
     const limit=Math.min(height*.39,width*.44);
     targets=[];
     for(const [index,button] of buttons.entries()){
@@ -113,7 +151,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
       const perspective=(scoped?weapon.zoom:1)*(key==='sniper'?13:9.1)/Math.max(1,point.depth);
       const size=clamp(46*perspective,27,width<600?57:92);
       const visible=point.depth>.55&&point.x>.07&&point.x<.93&&point.y>.11&&point.y<.84
-        && (!scoped||Math.hypot(x-width/2,y-height/2)<limit-size*.15)
+        && (!scoped||Math.hypot(x-optic.x,y-optic.y)<limit-size*.15)
         && (!camera.available||camera.hasLineOfSight(...position));
       button.hidden=!visible;
       if(!visible) continue;
@@ -226,14 +264,15 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
     }
   }
 
-  function fireAtCenter() {
-    shoot({x:width/2,y:height/2});
+  function fireAtAim() {
+    shoot(aimPoint());
   }
 
   function fireAtPointer(x,y) {
     const bounds=canvas.getBoundingClientRect();
     const point={x:x-bounds.left,y:y-bounds.top};
-    if(scoped&&Math.hypot(point.x-width/2,point.y-height/2)>Math.min(height*.39,width*.44)) return;
+    const optic=aimPoint();
+    if(scoped&&Math.hypot(point.x-optic.x,point.y-optic.y)>Math.min(height*.39,width*.44)) return;
     shoot(point);
   }
 
@@ -245,8 +284,8 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
   function startTrigger(token) {
     if(trigger!==null||!canShoot()) return;
     trigger=token;
-    fireAtCenter();
-    if(weapon.automatic&&trigger===token) repeatTimer=setInterval(fireAtCenter,weapon.cadence);
+    fireAtAim();
+    if(weapon.automatic&&trigger===token) repeatTimer=setInterval(fireAtAim,weapon.cadence);
   }
 
   function stopTrigger(token=trigger) {
@@ -264,7 +303,7 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
   });
   fireButton.addEventListener('lostpointercapture',e=>stopTrigger(e.pointerId));
   fireButton.addEventListener('pointerup',e=>stopTrigger(e.pointerId));
-  fireButton.addEventListener('click',e=>{if(e.detail===0) fireAtCenter();});
+  fireButton.addEventListener('click',e=>{if(e.detail===0) fireAtAim();});
   reloadButton.addEventListener('click',reload);
   aimButton.addEventListener('click',toggleScope);
   range.addEventListener('contextmenu',e=>{
@@ -295,9 +334,11 @@ export function createFiringRange({range, canvas, camera, canShoot, onHit, onAct
   document.addEventListener('pointerlockchange',()=>{
     range.dataset.locked=locked();
     id('mouse-aim').setAttribute('aria-pressed',String(locked()));
-    if(!locked()) stopTrigger();
+    clearPointerAim();
+    stopTrigger();
+    draw();
   });
   document.addEventListener('pointerlockerror',()=>announce('把滑鼠移到場內即可瞄準。',false,true));
 
-  return {render,reset,pause,updateHud,locked,turnScale,startTrigger,stopTrigger,fireAtTarget,fireAtPointer,reload,toggleScope};
+  return {render,reset,pause,updateHud,locked,turnScale,startTrigger,stopTrigger,fireAtTarget,fireAtPointer,reload,toggleScope,aimPoint,setPointerAim,clearPointerAim};
 }

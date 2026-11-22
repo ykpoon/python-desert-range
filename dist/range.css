@@ -5,14 +5,15 @@
 }
 #viewmodel, #shot-fx, .scope, #hit-mark { pointer-events: none; }
 #viewmodel { transform-origin: 73% 95%; }
-.range[data-locked="true"] { cursor: none; }
+.range[data-locked="true"], .range[data-pointer-aim="true"],
+.range[data-pointer-aim="true"] :is(.world-target,.training-robot) { cursor: none; }
 .range[data-locked="true"] .world-target { pointer-events: none; }
 .range[data-scoped="true"] #viewmodel, .range[data-scoped="true"] .crosshair { visibility: hidden; }
 .scope { position: absolute; inset: 0; display: none; }
 .range[data-scoped="true"] .scope { display: block; }
 .scope-ring {
   position: absolute;
-  top: 50%; left: 50%;
+  top: var(--aim-y,50%); left: var(--aim-x,50%);
   width: calc(var(--optic-radius) * 2); height: calc(var(--optic-radius) * 2);
   transform: translate(-50%,-50%);
   border: 3px solid #172029;
@@ -30,7 +31,7 @@
 .scope-marks.horizontal::after { height: 7px; width: 32%; background: repeating-linear-gradient(90deg,#182020 0 1px, transparent 1px 14%); }
 .scope-marks.vertical::after { height: 31%; width: 7px; background: repeating-linear-gradient(#182020 0 1px, transparent 1px 14%); }
 .scope-ring strong { position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%); font: 700 15px var(--mono); color: #f3e8c9; text-shadow: 0 1px 3px #121b19; }
-.crosshair { width: 34px; height: 34px; }
+.range .crosshair { left:var(--aim-x,50%); top:var(--aim-y,50%); width:34px; height:34px; }
 .crosshair span { width: 29px; }
 .crosshair b { height: 29px; }
 .crosshair i { width: 9px; height: 9px; }

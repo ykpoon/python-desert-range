@@ -8,9 +8,9 @@
   <title>Python 沙城訓練場</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="stylesheet" href="./style.css">
-  <link rel="stylesheet" href="./range.css">
-  <link rel="stylesheet" href="./challenge.css">
-  <script type="module" src="./app.js?v=3"></script>
+  <link rel="stylesheet" href="./range.css?v=4">
+  <link rel="stylesheet" href="./challenge.css?v=4">
+  <script type="module" src="./app.js?v=5"></script>
 </head>
 <body>
   <svg class="symbol-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -71,6 +71,7 @@
         <canvas id="viewmodel" aria-hidden="true"></canvas>
         <div id="patrol-targets" aria-label="訓練假人"></div>
         <div id="targets" aria-label="資料靶"></div>
+        <div id="patrol-trail" class="patrol-trail" hidden aria-hidden="true"></div>
         <div id="patrol-bolt" class="patrol-bolt" hidden aria-hidden="true"></div>
         <canvas id="shot-fx" aria-hidden="true"></canvas>
         <div class="scope" aria-hidden="true">
@@ -97,7 +98,7 @@
           <div class="weapon-controls">
             <button type="button" class="range-control" id="jump">跳躍</button>
             <button type="button" class="range-control" id="aim" aria-pressed="false" hidden><svg aria-hidden="true"><use href="#i-target"></use></svg><span>開鏡</span></button>
-            <button type="button" class="range-control" id="reload"><svg aria-hidden="true"><use href="#i-loop"></use></svg><span>換彈</span></button>
+            <button type="button" class="range-control" id="reload" aria-keyshortcuts="R" title="換彈（R）"><svg aria-hidden="true"><use href="#i-loop"></use></svg><span>換彈</span><kbd aria-hidden="true">R</kbd></button>
             <button type="button" class="range-control fire" id="fire"><svg aria-hidden="true"><use href="#i-target"></use></svg><span>開火</span></button>
           </div>
         </div>
@@ -115,7 +116,7 @@
   <dialog id="help-dialog" aria-labelledby="help-title">
     <div class="dialog-head"><div><p class="eyebrow">訓練指南</p><h2 id="help-title">操作說明</h2></div><form method="dialog"><button class="icon-button close" aria-label="關閉">×</button></form></div>
     <ul class="help-list">
-      <li><b>電腦</b><span>按 WASD 移動。滑鼠移入場內後，移動滑鼠即轉視角，左擊開火，空白鍵跳躍。也可按滑鼠圖示鎖定視角，按 Esc 離開。按 R 換彈，狙擊槍用右擊或 Q 開鏡。</span></li>
+      <li><b>電腦</b><span>按 WASD 移動。準星跟隨滑鼠，左擊從準星位置開火。把滑鼠移到場景邊緣可轉視角，空白鍵跳躍。也可按滑鼠圖示鎖定視角，直接移動滑鼠轉向，按 Esc 離開。按 R 換彈，狙擊槍用右擊或 Q 開鏡。</span></li>
       <li><b>iPad</b><span>按住左下方向鍵移動，在場內拖曳瞄準，按「開火」或「跳躍」。也可輕觸靶射擊，或用「開鏡」放大。</span></li>
       <li><b>假人</b><span>開始移動、瞄準或開火後，假人會巡邏及發射光彈。射中假人可取得題目提示。被射中三次就要重試本題，可移動或跳躍閃避。</span></li>
       <li><b>關卡</b><span>命中正確資料靶後，可看解說或完成程式任務。步槍可按住連射，散彈槍要走近使用。每題首次完成得 100 分。</span></li>

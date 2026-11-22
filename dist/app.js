@@ -1,7 +1,7 @@
 import {lessons} from './lessons.js';
 import {createWorld} from './world.js';
-import {createFiringRange} from './firing-range.js?v=3';
-import {createPatrolView, jumpHeight} from './patrol.js';
+import {createFiringRange} from './firing-range.js?v=4';
+import {createPatrolView, jumpHeight} from './patrol.js?v=4';
 
 const byId = id => document.getElementById(id);
 const icon = name => '<svg aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
@@ -41,7 +41,7 @@ let activeWorker = null;
 let workerTimer = null;
 let enlarged = false;
 let jumpTime = null;
-let hoverPoint = null;
+let edgeLook = null;
 let windowActive = true;
 let damageAnimation;
 
@@ -57,7 +57,7 @@ const objective = byId('objective');
 const challengeState = byId('challenge-state');
 const currentRound = () => lessons[lesson].rounds[round];
 const modalIsOpen = () => helpDialog.open || codeDialog.open || finishDialog.open;
-const patrol = createPatrolView({range,camera,onTarget:index=>firing.fireAtTarget(index)});
+const patrol = createPatrolView({range,camera,onTarget:index=>firing.fireAtTarget(index),getAim:()=>firing.aimPoint()});
 const firing = createFiringRange({
   range, canvas, camera, draw, announce,
   onHit:index=>index<3?select(index):hitPatrol(index),
@@ -106,7 +106,7 @@ function renderRound() {
   phase = 'scan';
   resetJump();
   moving.clear();
-  hoverPoint=null;
+  edgeLook=null;
   byId('jump').disabled=false;
   patrol.reset();
   setChallengeStatus('開始瞄準或移動');
@@ -139,7 +139,9 @@ function renderRound() {
     button.innerHTML = '<span class="target-ring">' + icon('code') + '</span><span class="target-caption"><small>' + (index+1) + '</small><span></span></span>';
     button.querySelector('.target-caption span').textContent = name;
     button.setAttribute('aria-label','資料靶 ' + (index + 1) + '，' + name);
-    button.addEventListener('click',() => firing.fireAtTarget(index));
+    button.addEventListener('click',event=>{
+      if(event.detail===0||event.pointerType==='touch'||event.pointerType==='pen') firing.fireAtTarget(index);
+    });
     return button;
   });
   byId('targets').replaceChildren(...targetButtons);
@@ -425,9 +427,11 @@ function tick(t) {
     if(jumpTime>=.72) resetJump();
   }
   if(patrol.active) handlePatrol(patrol.update(elapsed));
-  if(moving.size||jumping) draw();
+  const turning=phase==='scan'&&edgeLook;
+  if(turning) camera.rotate(turning.x*1.35*seconds*aimSpeed,turning.y*1.08*seconds*aimSpeed);
+  if(moving.size||jumping||turning) draw();
   else patrol.render(phase==='scan');
-  raf=(moving.size||jumpTime!==null||patrol.active)?requestAnimationFrame(tick):0;
+  raf=(moving.size||jumpTime!==null||patrol.active||turning)?requestAnimationFrame(tick):0;
   if(!raf) lastFrame=0;
 }
 
@@ -458,6 +462,8 @@ function closeEnlarged() {
   if (!enlarged) return;
   enlarged = false;
   range.classList.remove('enlarged');
+  firing.clearPointerAim();
+  edgeLook=null;
   byId('question-dock').after(objective);
   byId('expand').setAttribute('aria-pressed','false');
   byId('expand').setAttribute('aria-label','全屏訓練場');
@@ -489,8 +495,9 @@ window.addEventListener('blur',()=>{
   windowActive=false;
   moving.clear();
   drag=null;
-  hoverPoint=null;
+  edgeLook=null;
   firing.stopTrigger();
+  if(firing.clearPointerAim()) draw();
 });
 window.addEventListener('focus',()=>{
   windowActive=true;
@@ -499,33 +506,54 @@ window.addEventListener('focus',()=>{
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden&&(patrol.active||jumpTime!==null)) ensureLoop();
 });
-canvas.addEventListener('pointerdown',event=>{
-  if(!camera.available||event.button!==0||phase!=='scan') return;
-  canvas.focus({preventScroll:true});
+const isGameControl=element=>Boolean(element.closest('.scene-buttons,.scene-bottom,#expanded-question'));
+range.addEventListener('pointerdown',event=>{
+  if(event.button!==0||phase!=='scan'||isGameControl(event.target)) return;
   if(event.pointerType==='mouse'){
+    event.preventDefault();
+    canvas.focus({preventScroll:true});
+    if(!firing.locked()){
+      firing.setPointerAim(event.clientX,event.clientY);
+      draw();
+    }
     firing.startTrigger('mouse');
     return;
   }
-  if(drag) return;
+  edgeLook=null;
+  if(firing.clearPointerAim()) draw();
+  if(drag||event.target!==canvas||!camera.available) return;
   drag={id:event.pointerId,x:event.clientX,y:event.clientY,distance:0};
   canvas.setPointerCapture(event.pointerId);
 });
-range.addEventListener('pointerleave',()=>{hoverPoint=null;});
+range.addEventListener('pointerleave',()=>{
+  edgeLook=null;
+  if(!firing.locked()){
+    firing.stopTrigger('mouse');
+    if(firing.clearPointerAim()) draw();
+  }
+});
 range.addEventListener('pointermove',event=>{
-  if(phase!=='scan'||modalIsOpen()||!camera.available||firing.locked()) return;
+  if(phase!=='scan'||modalIsOpen()||firing.locked()) return;
   if(event.pointerType==='mouse'){
-    if(event.target.closest('.scene-buttons,.scene-bottom,#expanded-question')){
-      hoverPoint=null;
+    if(isGameControl(event.target)){
+      edgeLook=null;
+      firing.stopTrigger('mouse');
+      if(firing.clearPointerAim()) draw();
       return;
     }
-    const last=hoverPoint;
-    hoverPoint={x:event.clientX,y:event.clientY};
-    if(!last) return;
-    const dx=event.clientX-last.x,dy=event.clientY-last.y;
-    if(!dx&&!dy) return;
-    startActivity();
-    const speed=firing.turnScale();
-    camera.rotate(dx*.0029*speed,-dy*.0026*speed);
+    firing.setPointerAim(event.clientX,event.clientY);
+    if(camera.available){
+      const bounds=canvas.getBoundingClientRect();
+      const edge=coordinate=>{
+        const centered=coordinate-.5;
+        return Math.sign(centered)*Math.min(1,Math.max(0,(Math.abs(centered)-.36)/.14));
+      };
+      const x=edge((event.clientX-bounds.left)/bounds.width);
+      const y=-edge((event.clientY-bounds.top)/bounds.height);
+      edgeLook=(x||y)?{x,y}:null;
+      startActivity();
+      if(edgeLook) ensureLoop();
+    }
     draw();
     return;
   }
@@ -545,7 +573,7 @@ document.addEventListener('mousemove', event=>{
   camera.rotate(event.movementX*.0029*speed,-event.movementY*.0026*speed);
   draw();
 });
-document.addEventListener('pointerlockchange',()=>{hoverPoint=null;});
+document.addEventListener('pointerlockchange',()=>{edgeLook=null;});
 window.addEventListener('pointerup',event=>{
   if(event.button===0) firing.stopTrigger('mouse');
 });
@@ -567,13 +595,15 @@ byId('expand').addEventListener('click',() => {
   if (enlarged) {closeEnlarged();return;}
   enlarged=true;
   range.classList.add('enlarged');
+  firing.clearPointerAim();
+  edgeLook=null;
   byId('expanded-question').append(objective);
   byId('expand').setAttribute('aria-pressed','true');
   byId('expand').setAttribute('aria-label','退出全屏');
   byId('expand').title='退出全屏';
   draw();
 });
-byId('recenter').addEventListener('click',() => {camera.reset();resetJump();draw();});
+byId('recenter').addEventListener('click',() => {camera.reset();resetJump();edgeLook=null;draw();});
 byId('jump').addEventListener('click',startJump);
 byId('hint').addEventListener('click',() => toggleHint('hint','hint-text'));
 byId('code-hint').addEventListener('click',() => toggleHint('code-hint','code-hint-text'));

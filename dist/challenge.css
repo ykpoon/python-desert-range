@@ -33,7 +33,38 @@
 .training-robot[data-state="warning"] .robot-label {color:#ffe5cf; background:#642d22;border-color:#f49b7e;}
 .training-robot[data-state="stunned"] { opacity:.40; rotate:-10deg; pointer-events:none; }
 .range[data-locked="true"] .training-robot { pointer-events:none; }
-.patrol-bolt { position:absolute; z-index:1; width:9px; height:9px; pointer-events:none; border-radius:50%; background:#ffd4a0; box-shadow:0 0 7px 2px #ff8855,0 0 18px #f55750; }
+
+.robot-blaster {
+  left:75%; top:41%; width:54%; height:14%; transform:translate(-50%,-50%);
+  border:1px solid #e3aa69; border-radius:13% 9% 15% 11%;
+  background:linear-gradient(#ac7549 0 23%,#41352b 24% 58%,#221e1d 59%);
+  box-shadow:0 2px 3px #3b271b9e;
+}
+.training-robot[data-facing="left"] .robot-blaster { left:25%; transform:translate(-50%,-50%) scaleX(-1); }
+.robot-blaster::before {
+  content:""; position:absolute; left:29%; top:68%; width:19%; height:62%;
+  transform:skewX(-15deg); border-radius:2px; background:#352a21;
+}
+.robot-muzzle { left:96%; top:17%; width:12%; height:71%; background:#da9061; border-radius:2px; }
+.robot-muzzle::after {
+  content:""; position:absolute; inset:-70% -140%;
+  border-radius:50%; background:#fff4ba; opacity:0;
+  box-shadow:0 0 14px 7px #ff9363;
+}
+.training-robot[data-state="flight"] .robot-muzzle::after { animation: patrol-flash .23s ease-out; }
+@keyframes patrol-flash { from{opacity:1;scale:.72} to{opacity:0;scale:1.55} }
+.patrol-trail,.patrol-bolt { position:absolute; z-index:1; pointer-events:none; }
+.patrol-trail {
+  height:3px; transform-origin:left center; border-radius:5px;
+  background:linear-gradient(90deg,#ffd07d11,#f97843cb 60%,#ffe4aa);
+  box-shadow:0 0 9px #ff754e;
+}
+.patrol-bolt {
+  width:9px; height:9px; border-radius:50%; background:#fff2b9;
+  box-shadow:0 0 7px 2px #ff8855,0 0 18px #f55750;
+}
+#reload kbd { display:inline-block; }
+@media(pointer:coarse) { #reload kbd { display:none; } }
 .damage-vignette { position:absolute; z-index:1; inset:0; pointer-events:none; opacity:0; background:radial-gradient(ellipse at center, transparent 50%, #c63532a8); }
 .challenge-status {
   position:absolute; left:15px; bottom:68px; z-index:2;
